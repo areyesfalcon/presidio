@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
-from setuptools import setup
 import os.path
+
 from presidio_cli import (
+    APP_DESCRIPTION,
     APP_NAME,
     APP_VERSION,
-    APP_DESCRIPTION,
 )
+from setuptools import setup
 
 readme = ""
 here = os.path.abspath(os.path.dirname(__file__))
@@ -31,5 +32,5 @@ setup(
     ],
     install_requires=["presidio-analyzer>=2.2", "pyyaml", "pathspec"],
     trusted_host=["pypi.org"],
-    tests_require=["pytest", "flake8>=3.7.9"],
+    tests_require=["pytest", "ruff"],
 )

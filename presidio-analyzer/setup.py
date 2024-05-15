@@ -1,4 +1,5 @@
 """Setup.py for Presidio Analyzer."""
+
 import os.path
 from os import path
 
@@ -22,17 +23,12 @@ setuptools.setup(
     version=__version__,
     description="Presidio analyzer package",
     url="https://github.com/Microsoft/presidio",
-    packages=[
-        "presidio_analyzer",
-        "presidio_analyzer.predefined_recognizers",
-        "presidio_analyzer.nlp_engine",
-        "presidio_analyzer.context_aware_enhancers",
-    ],
+    packages=setuptools.find_packages(),
     package_data={
         "presidio_analyzer": ["py.typed", "conf/*"],
     },
     trusted_host=["pypi.org"],
-    tests_require=["pytest", "flake8>=3.7.9"],
+    tests_require=["pytest", "ruff"],
     install_requires=[
         "spacy>=3.4.4, <4.0.0",
         "regex",

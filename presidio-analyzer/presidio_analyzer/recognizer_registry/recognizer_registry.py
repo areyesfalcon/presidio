@@ -1,56 +1,55 @@
 import copy
 import logging
-from typing import Optional, List, Iterable, Union, Type, Dict
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Type, Union
 
 import regex as re
-
-from pathlib import Path
-from presidio_analyzer.nlp_engine.transformers_nlp_engine import (
-    TransformersNlpEngine,
-)
-
 import yaml
 
 from presidio_analyzer import EntityRecognizer, PatternRecognizer
-from presidio_analyzer.nlp_engine import NlpEngine, SpacyNlpEngine, \
-      StanzaNlpEngine
+from presidio_analyzer.nlp_engine import (
+    NlpEngine,
+    SpacyNlpEngine,
+    StanzaNlpEngine,
+    TransformersNlpEngine,
+)
 from presidio_analyzer.predefined_recognizers import (
+    AuAbnRecognizer,
+    AuAcnRecognizer,
+    AuMedicareRecognizer,
+    AuTfnRecognizer,
     CreditCardRecognizer,
     CryptoRecognizer,
     DateRecognizer,
     EmailRecognizer,
+    EsNieRecognizer,
+    EsNifRecognizer,
     IbanRecognizer,
+    InAadhaarRecognizer,
+    InPanRecognizer,
+    InPassportRecognizer,
+    InVehicleRegistrationRecognizer,
+    InVoterRecognizer,
     IpRecognizer,
+    ItDriverLicenseRecognizer,
+    ItFiscalCodeRecognizer,
+    ItIdentityCardRecognizer,
+    ItPassportRecognizer,
+    ItVatCodeRecognizer,
     MedicalLicenseRecognizer,
     NhsRecognizer,
     PhoneRecognizer,
-    UrlRecognizer,
-    UsBankRecognizer,
-    UsLicenseRecognizer,
-    UsItinRecognizer,
-    UsPassportRecognizer,
-    UsSsnRecognizer,
+    PlPeselRecognizer,
     SgFinRecognizer,
     SpacyRecognizer,
-    EsNifRecognizer,
-    EsNieRecognizer,
     StanzaRecognizer,
-    AuAbnRecognizer,
-    AuAcnRecognizer,
-    AuTfnRecognizer,
-    AuMedicareRecognizer,
-    ItDriverLicenseRecognizer,
-    ItFiscalCodeRecognizer,
-    ItVatCodeRecognizer,
     TransformersRecognizer,
-    ItPassportRecognizer,
-    ItIdentityCardRecognizer,
-    InPanRecognizer,
-    PlPeselRecognizer,
-    InAadhaarRecognizer,
-    InVehicleRegistrationRecognizer,
-    InVoterRecognizer,
-    InPassportRecognizer,
+    UrlRecognizer,
+    UsBankRecognizer,
+    UsItinRecognizer,
+    UsLicenseRecognizer,
+    UsPassportRecognizer,
+    UsSsnRecognizer,
 )
 
 logger = logging.getLogger("presidio-analyzer")
@@ -70,18 +69,55 @@ class RecognizerRegistry:
     def __init__(
         self,
         recognizers: Optional[Iterable[EntityRecognizer]] = None,
-        global_regex_flags: Optional[int] = re.DOTALL | re.MULTILINE |
-            re.IGNORECASE,
+        global_regex_flags: Optional[int] = re.DOTALL | re.MULTILINE | re.IGNORECASE,
+        supported_languages: Optional[List[str]] = None,
     ):
         if recognizers:
             self.recognizers = recognizers
         else:
             self.recognizers = []
         self.global_regex_flags = global_regex_flags
+        self.supported_languages = (
+            supported_languages if supported_languages else ["en"]
+        )
+
+    def _create_nlp_recognizer(
+        self, nlp_engine: NlpEngine = None, supported_language: str = None
+    ) -> SpacyRecognizer:
+        nlp_recognizer = self._get_nlp_recognizer(nlp_engine)
+
+        if nlp_engine:
+            return nlp_recognizer(
+                supported_language=supported_language,
+                supported_entities=nlp_engine.get_supported_entities(),
+            )
+
+        return nlp_recognizer(supported_language=supported_language)
+
+    def add_nlp_recognizer(self, nlp_engine: NlpEngine) -> None:
+        """
+        Adding NLP recognizer in accordance with the nlp engine.
+
+        :param nlp_engine: The NLP engine.
+        :return: None
+        """
+
+        if not nlp_engine:
+            supported_languages = self.supported_languages
+        else:
+            supported_languages = nlp_engine.get_supported_languages()
+
+        self.recognizers.extend(
+            [
+                self._create_nlp_recognizer(
+                    nlp_engine=nlp_engine, supported_language=supported_language
+                )
+                for supported_language in supported_languages
+            ]
+        )
 
     def load_predefined_recognizers(
-        self, languages: Optional[List[str]] = None,
-        nlp_engine: NlpEngine = None
+        self, languages: Optional[List[str]] = None, nlp_engine: NlpEngine = None
     ) -> None:
         """
         Load the existing recognizers into memory.
@@ -92,8 +128,6 @@ class RecognizerRegistry:
         """
         if not languages:
             languages = ["en"]
-
-        nlp_recognizer = self._get_nlp_recognizer(nlp_engine)
 
         recognizers_map = {
             "en": [
@@ -153,14 +187,7 @@ class RecognizerRegistry:
                 for rc in recognizers_map.get("ALL", [])
             ]
             self.recognizers.extend(all_recognizers)
-            if nlp_engine:
-                nlp_recognizer_inst = nlp_recognizer(
-                    supported_language=lang,
-                    supported_entities=nlp_engine.get_supported_entities(),
-                )
-            else:
-                nlp_recognizer_inst = nlp_recognizer(supported_language=lang)
-            self.recognizers.append(nlp_recognizer_inst)
+        self.add_nlp_recognizer(nlp_engine=nlp_engine)
 
     @staticmethod
     def _get_nlp_recognizer(
@@ -190,8 +217,7 @@ class RecognizerRegistry:
         ad_hoc_recognizers: Optional[List[EntityRecognizer]] = None,
     ) -> List[EntityRecognizer]:
         """
-        Return a list of recognizers which supports the specified name and\
-            language.
+        Return a list of recognizers which supports the specified name and language.
 
         :param entities: the requested entities
         :param language: the requested language
@@ -259,20 +285,43 @@ class RecognizerRegistry:
 
         self.recognizers.append(recognizer)
 
-    def remove_recognizer(self, recognizer_name: str) -> None:
+    def remove_recognizer(
+        self, recognizer_name: str, language: Optional[str] = None
+    ) -> None:
         """
         Remove a recognizer based on its name.
 
         :param recognizer_name: Name of recognizer to remove
+        :param language: The supported language of the recognizer to be removed,
+        in case multiple recognizers with the same name are present,
+        and only one should be removed.
         """
-        new_recognizers = [
-            rec for rec in self.recognizers if rec.name != recognizer_name
-        ]
-        logger.info(
-            "Removed %s recognizers which had the name %s",
-            str(len(self.recognizers) - len(new_recognizers)),
-            recognizer_name,
-        )
+
+        if not language:
+            new_recognizers = [
+                rec for rec in self.recognizers if rec.name != recognizer_name
+            ]
+
+            logger.info(
+                "Removed %s recognizers which had the name %s",
+                str(len(self.recognizers) - len(new_recognizers)),
+                recognizer_name,
+            )
+
+        else:
+            new_recognizers = [
+                rec
+                for rec in self.recognizers
+                if rec.name != recognizer_name or rec.supported_language != language
+            ]
+
+            logger.info(
+                "Removed %s recognizers which had the name %s and language %s",
+                str(len(self.recognizers) - len(new_recognizers)),
+                recognizer_name,
+                language,
+            )
+
         self.recognizers = new_recognizers
 
     def add_pattern_recognizer_from_dict(self, recognizer_dict: Dict) -> None:
@@ -283,9 +332,9 @@ class RecognizerRegistry:
 
         :example:
         >>> registry = RecognizerRegistry()
-        >>> recognizer = { "name": "Titles Recognizer", "supported_language": "de","supported_entity": "TITLE", "deny_list": ["Mr.","Mrs."]} # noqa: E501
+        >>> recognizer = { "name": "Titles Recognizer", "supported_language": "de","supported_entity": "TITLE", "deny_list": ["Mr.","Mrs."]}
         >>> registry.add_pattern_recognizer_from_dict(recognizer)
-        """
+        """  # noqa: E501
 
         recognizer = PatternRecognizer.from_dict(recognizer_dict)
         self.add_recognizer(recognizer)
@@ -305,12 +354,12 @@ class RecognizerRegistry:
         """
 
         try:
-            with open(yml_path, "r") as stream:
+            with open(yml_path) as stream:
                 yaml_recognizers = yaml.safe_load(stream)
 
             for yaml_recognizer in yaml_recognizers["recognizers"]:
                 self.add_pattern_recognizer_from_dict(yaml_recognizer)
-        except IOError as io_error:
+        except OSError as io_error:
             print(f"Error reading file {yml_path}")
             raise io_error
         except yaml.YAMLError as yaml_error:
@@ -356,8 +405,7 @@ class RecognizerRegistry:
 
         supported_entities = []
         for language in languages:
-            recognizers = self.get_recognizers(language=language,
-                                               all_fields=True)
+            recognizers = self.get_recognizers(language=language, all_fields=True)
 
             for recognizer in recognizers:
                 supported_entities.extend(recognizer.get_supported_entities())

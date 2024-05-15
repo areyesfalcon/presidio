@@ -3,9 +3,9 @@
 import os.path
 from os import path
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
-test_requirements = ["pytest>=3", "flake8==3.7.9"]
+test_requirements = ["pytest>=3", "ruff"]
 
 __version__ = ""
 this_directory = path.abspath(path.dirname(__file__))

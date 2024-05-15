@@ -1,19 +1,23 @@
 import json
 import logging
 from typing import List, Optional
+
 import regex as re
 
 from presidio_analyzer import (
-    RecognizerRegistry,
-    RecognizerResult,
     EntityRecognizer,
+    RecognizerResult,
 )
 from presidio_analyzer.app_tracer import AppTracer
 from presidio_analyzer.context_aware_enhancers import (
     ContextAwareEnhancer,
     LemmaContextAwareEnhancer,
 )
-from presidio_analyzer.nlp_engine import NlpEngine, NlpEngineProvider, NlpArtifacts
+from presidio_analyzer.nlp_engine import NlpArtifacts, NlpEngine, NlpEngineProvider
+from presidio_analyzer.recognizer_registry import (
+    RecognizerRegistry,
+    RecognizerRegistryProvider,
+)
 
 logger = logging.getLogger("presidio-analyzer")
 
@@ -58,9 +62,6 @@ class AnalyzerEngine:
             provider = NlpEngineProvider()
             nlp_engine = provider.create_engine()
 
-        if not registry:
-            logger.info("registry not provided, creating default.")
-            registry = RecognizerRegistry()
         if not app_tracer:
             app_tracer = AppTracer()
         self.app_tracer = app_tracer
@@ -71,13 +72,21 @@ class AnalyzerEngine:
         if not self.nlp_engine.is_loaded():
             self.nlp_engine.load()
 
-        self.registry = registry
+        if not registry:
+            logger.info("registry not provided, creating default.")
+            provider = RecognizerRegistryProvider(
+                registry_configuration={"supported_languages": self.supported_languages}
+            )
+            registry = provider.create_recognizer_registry()
+            registry.add_nlp_recognizer(nlp_engine=self.nlp_engine)
 
-        # load all recognizers
+        # added to support the previous interface
         if not registry.recognizers:
             registry.load_predefined_recognizers(
                 nlp_engine=self.nlp_engine, languages=self.supported_languages
             )
+
+        self.registry = registry
 
         self.log_decision_process = log_decision_process
         self.default_score_threshold = default_score_threshold
@@ -178,7 +187,7 @@ class AnalyzerEngine:
         >>> results = analyzer.analyze(text='My phone number is 212-555-5555', entities=['PHONE_NUMBER'], language='en') # noqa D501
         >>> print(results)
         [type: PHONE_NUMBER, start: 19, end: 31, score: 0.85]
-        """
+        """  # noqa: E501
 
         all_fields = not entities
 
